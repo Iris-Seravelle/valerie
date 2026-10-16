@@ -1,0 +1,9 @@
+module Invalid_Syntax;
+
+target aarch64;
+
+procedure BrokenProcedure()
+  ensures false;
+{
+  this is intentionally completely broken syntax @@@ !!! ???
+}

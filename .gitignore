@@ -1,0 +1,14 @@
+/target
+/tmp
+/dist
+.cache
+
+**/*.o
+**/*.a
+**/*.txt
+**/*.cache/
+**/.cache/
+*.swt_env
+*.checked
+
+/tests/integration/target

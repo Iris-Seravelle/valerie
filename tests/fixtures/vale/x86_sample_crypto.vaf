@@ -1,0 +1,162 @@
+// tests/fixtures/vale/x86_sample_crypto.vaf
+// Minimal Project Everest Vale verified specification for x86_64 targets.
+// Exercises 64-bit GPR arithmetic and SSE/AES-NI crypto primitives.
+module X86_Sample_Crypto
+
+#verbatim{:interface}
+module Map = FStar.Map
+let map = Map.t
+let (.[]) = Map.sel
+let (.[]<-) = Map.upd
+
+type register =
+  | RAX | RBX | RCX | RDX | RSI | RDI | RBP | RSP
+  | R8  | R9  | R10 | R11 | R12 | R13 | R14 | R15
+  | XMM0 | XMM1 | XMM2 | XMM3 | XMM4 | XMM5 | XMM6 | XMM7
+
+type ins =
+  | IMov64     : dst:register -> src:register -> ins
+  | IAdd64     : dst:register -> src:register -> ins
+  | ISub64     : dst:register -> src:register -> ins
+  | IXor64     : dst:register -> src:register -> ins
+  | IAesenc    : dst:register -> src:register -> ins
+  | IAesdec    : dst:register -> src:register -> ins
+  | IPxor      : dst:register -> src:register -> ins
+  | IPaddd     : dst:register -> src:register -> ins
+  | IPclmulqdq : dst:register -> src:register -> imm:int -> ins
+
+type ocmp = | OPlaceholder : int -> ocmp
+type va_code =
+  | Ins : ins:ins -> va_code
+  | Block : block:va_codes -> va_code
+  | IfElse : ifCond:ocmp -> ifTrue:va_code -> ifFalse:va_code -> va_code
+  | While : whileCond:ocmp -> whileBody:va_code -> va_code
+and va_codes = list va_code
+
+type va_pbool = unit
+let va_ttrue () = ()
+let va_ffalse (s:string) = ()
+let va_pbool_and x y = ()
+
+let va_CNil () = []
+let va_CCons x y = x::y
+let va_Block (block:va_codes) : Tot va_code = Block block
+let va_IfElse (ifCond:ocmp) (ifTrue:va_code) (ifFalse:va_code) : va_code = IfElse ifCond ifTrue ifFalse
+let va_While (whileCond:ocmp) (whileBody:va_code) : va_code = While whileCond whileBody
+let va_get_block (c:va_code{Block? c}) : GTot va_codes = Block?.block c
+
+type va_state = map register int
+let va_get_ok (s:va_state) : GTot prop = True
+let va_get_reg (r:register) (s:va_state) : GTot int = s.[r]
+let va_update_ok (sM:va_state) (sK:va_state) : GTot va_state = sK
+let va_update_reg (r:register) (sM:va_state) (sK:va_state) : GTot va_state = sK.[r] <- sM.[r]
+
+type va_operand_reg = register
+let va_op_reg_reg (r:register) : Tot register = r
+let va_is_src_reg (r:register) (s:va_state) = True
+let va_is_dst_reg (r:register) (s:va_state) = True
+let va_update_operand_reg (r:register) (sM:va_state) (sK:va_state) : GTot va_state = va_update_reg r sM sK
+let va_eval_reg (s:va_state) (r:register) : GTot int = s.[r]
+
+type va_operand_xmm = register
+let va_op_xmm_xmm (r:register) : Tot register = r
+let va_is_src_xmm (r:register) (s:va_state) = True
+let va_is_dst_xmm (r:register) (s:va_state) = True
+let va_update_operand_xmm (r:register) (sM:va_state) (sK:va_state) : GTot va_state = va_update_reg r sM sK
+let va_eval_xmm (s:va_state) (r:register) : GTot int = s.[r]
+
+type cmp_operand = register
+let va_op_cmp_reg (r:register) : cmp_operand = r
+
+let va_state_eq (s0:va_state) (s1:va_state) : prop = True
+type va_fuel = int
+let eval_code (c:va_code) (s0:va_state) (f0:va_fuel) (sN:va_state) : prop = True
+
+unfold let va_hd = Cons?.hd
+unfold let va_tl = Cons?.tl
+let va_reveal_opaque (s:string) = norm_spec [zeta; delta_only [s]]
+let va_require_total (b0:va_code) (c:va_code) (s0:va_state) : prop = b0 == c
+let va_ensure_total (b0:va_code) (s0:va_state) (s1:va_state) (f1:va_fuel) : prop = eval_code b0 s0 f1 s1
+
+val va_eval_ins : c:va_code -> s0:va_state -> Tot (va_state & va_fuel)
+val va_ins_lemma : c:va_code -> s0:va_state -> Lemma (requires True) (ensures True)
+
+let va_lemma_empty_total (s0:va_state) (bN:va_codes) : Ghost (va_state & va_fuel)
+  (requires True)
+  (ensures (fun p -> fst p == s0 /\ eval_code (Block []) s0 (snd p) s0))
+  = (s0, 0)
+
+let va_lemma_merge_total (b0:va_codes) (s0:va_state) (f0:va_fuel) (sM:va_state) (fM:va_fuel) (sN:va_state) : Ghost (va_fuel)
+  (requires Cons? b0 /\ eval_code (Cons?.hd b0) s0 f0 sM /\ eval_code (Block (Cons?.tl b0)) sM fM sN)
+  (ensures (fun fN -> eval_code (Block b0) s0 fN sN))
+  = f0 + fM
+#endverbatim
+
+#verbatim
+let va_eval_ins c s0 = (s0, 1)
+let va_ins_lemma c s0 = ()
+#endverbatim
+
+var ok:bool {:state ok()};
+var rax:int {:state reg(RAX)};
+var rbx:int {:state reg(RBX)};
+var rcx:int {:state reg(RCX)};
+var rdx:int {:state reg(RDX)};
+
+var xmm0:int {:state reg(XMM0)};
+var xmm1:int {:state reg(XMM1)};
+
+operand_type reg:int := inout rax | inout rbx | inout rcx | inout rdx;
+operand_type xmm:int := inout xmm0 | inout xmm1;
+
+procedure Mov64(out dst:reg, in src:reg)
+    {:instruction Ins(IMov64(dst, src))}
+{ assume false; }
+
+procedure Add64(inout dst:reg, in src:reg)
+    {:instruction Ins(IAdd64(dst, src))}
+{ assume false; }
+
+procedure Sub64(inout dst:reg, in src:reg)
+    {:instruction Ins(ISub64(dst, src))}
+{ assume false; }
+
+procedure Xor64(inout dst:reg, in src:reg)
+    {:instruction Ins(IXor64(dst, src))}
+{ assume false; }
+
+procedure Aesenc(inout dst:xmm, in src:xmm)
+    {:instruction Ins(IAesenc(dst, src))}
+{ assume false; }
+
+procedure Aesdec(inout dst:xmm, in src:xmm)
+    {:instruction Ins(IAesdec(dst, src))}
+{ assume false; }
+
+procedure Pxor(inout dst:xmm, in src:xmm)
+    {:instruction Ins(IPxor(dst, src))}
+{ assume false; }
+
+procedure Paddd(inout dst:xmm, in src:xmm)
+    {:instruction Ins(IPaddd(dst, src))}
+{ assume false; }
+
+procedure Pclmulqdq(inout dst:xmm, in src:xmm, inline imm:int)
+    {:instruction Ins(IPclmulqdq(dst, src, imm))}
+{ assume false; }
+
+// x86_64 sample verified crypto procedure combining 64-bit ARX with AES-NI & PCLMULQDQ
+procedure X86_Sample_AesRound()
+    modifies
+        rax; rbx; rcx; rdx;
+        xmm0; xmm1;
+{
+    Mov64(rax, rbx);
+    Add64(rax, rcx);
+    Sub64(rax, rdx);
+    Xor64(rbx, rax);
+    Aesenc(xmm0, xmm1);
+    Pclmulqdq(xmm0, xmm1, 16);
+    Paddd(xmm0, xmm1);
+    Pxor(xmm0, xmm1);
+}

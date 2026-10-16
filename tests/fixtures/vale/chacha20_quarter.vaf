@@ -1,0 +1,127 @@
+// tests/fixtures/vale/chacha20_quarter.vaf
+// ChaCha20 Quarter-Round Core Algorithm in Project Everest Vale
+// Verifies ARX arithmetic: Add, Xor, Rotate
+module ChaCha20_Quarter
+
+#verbatim{:interface}
+module Map = FStar.Map
+let map = Map.t
+let (.[]) = Map.sel
+let (.[]<-) = Map.upd
+
+type register = | R0 | R1 | R2 | R3
+
+type ins =
+  | IAdd : dst:register -> s1:register -> s2:register -> ins
+  | ISub : dst:register -> s1:register -> s2:register -> ins
+  | IEor : dst:register -> s1:register -> s2:register -> ins
+  | IRor : dst:register -> src:register -> imm:int -> ins
+  | IMov : dst:register -> src:register -> ins
+
+type ocmp = | OPlaceholder : int -> ocmp
+type va_code =
+  | Ins : ins:ins -> va_code
+  | Block : block:va_codes -> va_code
+  | IfElse : ifCond:ocmp -> ifTrue:va_code -> ifFalse:va_code -> va_code
+  | While : whileCond:ocmp -> whileBody:va_code -> va_code
+and va_codes = list va_code
+
+type va_pbool = unit
+let va_ttrue () = ()
+let va_ffalse (s:string) = ()
+let va_pbool_and x y = ()
+
+let va_CNil () = []
+let va_CCons x y = x::y
+let va_Block (block:va_codes) : Tot va_code = Block block
+let va_IfElse (ifCond:ocmp) (ifTrue:va_code) (ifFalse:va_code) : va_code = IfElse ifCond ifTrue ifFalse
+let va_While (whileCond:ocmp) (whileBody:va_code) : va_code = While whileCond whileBody
+let va_get_block (c:va_code{Block? c}) : GTot va_codes = Block?.block c
+
+type va_state = map register int
+let va_get_ok (s:va_state) : GTot prop = True
+let va_get_reg (r:register) (s:va_state) : GTot int = s.[r]
+let va_update_ok (sM:va_state) (sK:va_state) : GTot va_state = sK
+let va_update_reg (r:register) (sM:va_state) (sK:va_state) : GTot va_state = sK.[r] <- sM.[r]
+
+type va_operand_reg = register
+let va_op_reg_reg (r:register) : Tot register = r
+let va_is_src_reg (r:register) (s:va_state) = True
+let va_is_dst_reg (r:register) (s:va_state) = True
+let va_update_operand_reg (r:register) (sM:va_state) (sK:va_state) : GTot va_state = va_update_reg r sM sK
+let va_eval_reg (s:va_state) (r:register) : GTot int = s.[r]
+
+type cmp_operand = register
+let va_op_cmp_reg (r:register) : cmp_operand = r
+
+let va_state_eq (s0:va_state) (s1:va_state) : prop = True
+type va_fuel = int
+let eval_code (c:va_code) (s0:va_state) (f0:va_fuel) (sN:va_state) : prop = True
+
+unfold let va_hd = Cons?.hd
+unfold let va_tl = Cons?.tl
+let va_reveal_opaque (s:string) = norm_spec [zeta; delta_only [s]]
+let va_require_total (b0:va_code) (c:va_code) (s0:va_state) : prop = b0 == c
+let va_ensure_total (b0:va_code) (s0:va_state) (s1:va_state) (f1:va_fuel) : prop = eval_code b0 s0 f1 s1
+
+val va_eval_ins : c:va_code -> s0:va_state -> Tot (va_state & va_fuel)
+val va_ins_lemma : c:va_code -> s0:va_state -> Lemma (requires True) (ensures True)
+
+let va_lemma_empty_total (s0:va_state) (bN:va_codes) : Ghost (va_state & va_fuel)
+  (requires True)
+  (ensures (fun p -> fst p == s0 /\ eval_code (Block []) s0 (snd p) s0))
+  = (s0, 0)
+
+let va_lemma_merge_total (b0:va_codes) (s0:va_state) (f0:va_fuel) (sM:va_state) (fM:va_fuel) (sN:va_state) : Ghost (va_fuel)
+  (requires Cons? b0 /\ eval_code (Cons?.hd b0) s0 f0 sM /\ eval_code (Block (Cons?.tl b0)) sM fM sN)
+  (ensures (fun fN -> eval_code (Block b0) s0 fN sN))
+  = f0 + fM
+#endverbatim
+
+#verbatim
+let va_eval_ins c s0 = (s0, 1)
+let va_ins_lemma c s0 = ()
+#endverbatim
+
+var ok:bool {:state ok()};
+var x0:int {:state reg(R0)};
+var x1:int {:state reg(R1)};
+var x2:int {:state reg(R2)};
+var x3:int {:state reg(R3)};
+
+operand_type reg:int := inout x0 | inout x1 | inout x2 | inout x3;
+
+procedure Add(out dst:reg, in s1:reg, in s2:reg)
+    {:instruction Ins(IAdd(dst, s1, s2))}
+{ assume false; }
+
+procedure Sub(out dst:reg, in s1:reg, in s2:reg)
+    {:instruction Ins(ISub(dst, s1, s2))}
+{ assume false; }
+
+procedure Eor(out dst:reg, in s1:reg, in s2:reg)
+    {:instruction Ins(IEor(dst, s1, s2))}
+{ assume false; }
+
+procedure Ror(out dst:reg, in src:reg, inline imm:int)
+    {:instruction Ins(IRor(dst, src, imm))}
+{ assume false; }
+
+procedure Mov(out dst:reg, in src:reg)
+    {:instruction Ins(IMov(dst, src))}
+{ assume false; }
+
+// ChaCha20 Quarter-Round Step 1:
+// a += b; d ^= a; d <<<= 16 (or ror 48 in 64-bit)
+// c += d; b ^= c; b <<<= 12
+procedure ChaCha20_QuarterRound_Step()
+    modifies
+        x0; x1; x2; x3;
+{
+    Add(x0, x0, x1);       // a += b
+    Eor(x3, x3, x0);       // d ^= a
+    Ror(x3, x3, 48);       // rotate d by 16 left (ror 48)
+    Add(x2, x2, x3);       // c += d
+    Eor(x1, x1, x2);       // b ^= c
+    Ror(x1, x1, 52);       // rotate b by 12 left (ror 52)
+}

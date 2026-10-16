@@ -1,0 +1,213 @@
+// tests/fixtures/vale/ghash_polyval_core.vaf
+// GF(2^128) multiplication and reduction (RFC 8452) for AArch64.
+//
+// Note on Vale architecture:
+// Vale is a verification frontend for F*/Dafny, not an assembly emitter.
+// It translates .vaf procedures into formal AST specifications and verification
+// lemmas. Primitive instruction procedures use `{:instruction ...} { assume false; }`
+// because machine instructions are hardware axioms whose semantics are defined
+// by the target ISA model, not software routines. A custom emitter (Valerie) is
+// required to extract the verified AST, emit machine instructions, and validate
+// execution on target hardware.
+module Ghash_Polyval_Core
+
+#verbatim{:interface}
+module Map = FStar.Map
+let map = Map.t
+let (.[]) = Map.sel
+let (.[]<-) = Map.upd
+
+type register =
+  | R0 | R1 | R2 | R3 | R4
+  | V0 | V1 | V2 | V3 | V4 | V5 | V6 | V7
+
+type ins =
+  | IFmovFromGpr : dst:register -> src:register -> ins
+  | IMovVecLane  : dst:register -> src:register -> ins
+  | IMovImm      : dst:register -> imm:int -> ins
+  | IDupVec      : dst:register -> src:register -> ins
+  | IPmull       : dst:register -> s1:register -> s2:register -> ins
+  | IPmull2      : dst:register -> s1:register -> s2:register -> ins
+  | IVeor        : dst:register -> src:register -> ins
+  | IVeor3       : dst:register -> s1:register -> s2:register -> ins
+  | IVext8       : dst:register -> s1:register -> s2:register -> ins
+  | IFmovToGpr   : dst:register -> src:register -> ins
+  | IMovLaneToGpr: dst:register -> src:register -> ins
+
+type ocmp = | OPlaceholder : int -> ocmp
+type va_code =
+  | Ins : ins:ins -> va_code
+  | Block : block:va_codes -> va_code
+  | IfElse : ifCond:ocmp -> ifTrue:va_code -> ifFalse:va_code -> va_code
+  | While : whileCond:ocmp -> whileBody:va_code -> va_code
+and va_codes = list va_code
+
+type va_pbool = unit
+let va_ttrue () = ()
+let va_ffalse (s:string) = ()
+let va_pbool_and x y = ()
+
+let va_CNil () = []
+let va_CCons x y = x::y
+let va_Block (block:va_codes) : Tot va_code = Block block
+let va_get_block (c:va_code{Block? c}) : GTot va_codes = Block?.block c
+
+type va_state = map register int
+let va_get_ok (s:va_state) : GTot prop = True
+let va_get_reg (r:register) (s:va_state) : GTot int = s.[r]
+let va_update_ok (sM:va_state) (sK:va_state) : GTot va_state = sK
+let va_update_reg (r:register) (sM:va_state) (sK:va_state) : GTot va_state = sK.[r] <- sM.[r]
+
+type va_operand_reg = register
+let va_op_reg_reg (r:register) : Tot register = r
+let va_is_src_reg (r:register) (s:va_state) = True
+let va_is_dst_reg (r:register) (s:va_state) = True
+let va_update_operand_reg (r:register) (sM:va_state) (sK:va_state) : GTot va_state = va_update_reg r sM sK
+
+type va_operand_vec = register
+let va_op_vec_reg (r:register) : Tot register = r
+let va_is_src_vec (r:register) (s:va_state) = True
+let va_is_dst_vec (r:register) (s:va_state) = True
+let va_update_operand_vec (r:register) (sM:va_state) (sK:va_state) : GTot va_state = va_update_reg r sM sK
+
+type cmp_operand = register
+let va_op_cmp_reg (r:register) : cmp_operand = r
+
+let va_state_eq (s0:va_state) (s1:va_state) : prop = True
+type va_fuel = int
+let eval_code (c:va_code) (s0:va_state) (f0:va_fuel) (sN:va_state) : prop = True
+
+unfold let va_hd = Cons?.hd
+unfold let va_tl = Cons?.tl
+let va_reveal_opaque (s:string) = norm_spec [zeta; delta_only [s]]
+let va_require_total (b0:va_code) (c:va_code) (s0:va_state) : prop = b0 == c
+let va_ensure_total (b0:va_code) (s0:va_state) (s1:va_state) (f1:va_fuel) : prop = eval_code b0 s0 f1 s1
+
+val va_eval_ins : c:va_code -> s0:va_state -> Tot (va_state & va_fuel)
+val va_ins_lemma : c:va_code -> s0:va_state -> Lemma (requires True) (ensures True)
+
+let va_lemma_empty_total (s0:va_state) (bN:va_codes) : Ghost (va_state & va_fuel)
+  (requires True)
+  (ensures (fun p -> fst p == s0 /\ eval_code (Block []) s0 (snd p) s0))
+  = (s0, 0)
+
+let va_lemma_merge_total (b0:va_codes) (s0:va_state) (f0:va_fuel) (sM:va_state) (fM:va_fuel) (sN:va_state) : Ghost (va_fuel)
+  (requires Cons? b0 /\ eval_code (Cons?.hd b0) s0 f0 sM /\ eval_code (Block (Cons?.tl b0)) sM fM sN)
+  (ensures (fun fN -> eval_code (Block b0) s0 fN sN))
+  = f0 + fM
+#endverbatim
+
+#verbatim
+let va_eval_ins c s0 = (s0, 1)
+let va_ins_lemma c s0 = ()
+#endverbatim
+
+var ok:bool {:state ok()};
+var x0:int {:state reg(R0)};
+var x1:int {:state reg(R1)};
+var x2:int {:state reg(R2)};
+var x3:int {:state reg(R3)};
+var x4:int {:state reg(R4)};
+
+var v0:int {:state reg(V0)};
+var v1:int {:state reg(V1)};
+var v2:int {:state reg(V2)};
+var v3:int {:state reg(V3)};
+var v4:int {:state reg(V4)};
+var v5:int {:state reg(V5)};
+var v6:int {:state reg(V6)};
+var v7:int {:state reg(V7)};
+
+operand_type reg:int := inout x0 | inout x1 | inout x2 | inout x3 | inout x4;
+operand_type vec:int := inout v0 | inout v1 | inout v2 | inout v3 | inout v4 | inout v5 | inout v6 | inout v7;
+
+procedure FmovFromGpr(out dst:vec, in src:reg)
+    {:instruction Ins(IFmovFromGpr(dst, src))}
+{ assume false; }
+
+procedure MovVecLane(inout dst:vec, in src:reg)
+    {:instruction Ins(IMovVecLane(dst, src))}
+{ assume false; }
+
+procedure MovImm(out dst:reg, inline imm:int)
+    {:instruction Ins(IMovImm(dst, imm))}
+{ assume false; }
+
+procedure DupVec(out dst:vec, in src:reg)
+    {:instruction Ins(IDupVec(dst, src))}
+{ assume false; }
+
+procedure Pmull(out dst:vec, in s1:vec, in s2:vec)
+    {:instruction Ins(IPmull(dst, s1, s2))}
+{ assume false; }
+
+procedure Pmull2(out dst:vec, in s1:vec, in s2:vec)
+    {:instruction Ins(IPmull2(dst, s1, s2))}
+{ assume false; }
+
+procedure Veor(inout dst:vec, in src:vec)
+    {:instruction Ins(IVeor(dst, src))}
+{ assume false; }
+
+procedure Veor3(out dst:vec, in s1:vec, in s2:vec)
+    {:instruction Ins(IVeor3(dst, s1, s2))}
+{ assume false; }
+
+procedure Vext8(out dst:vec, in s1:vec, in s2:vec)
+    {:instruction Ins(IVext8(dst, s1, s2))}
+{ assume false; }
+
+procedure FmovToGpr(out dst:reg, in src:vec)
+    {:instruction Ins(IFmovToGpr(dst, src))}
+{ assume false; }
+
+procedure MovLaneToGpr(out dst:reg, in src:vec)
+    {:instruction Ins(IMovLaneToGpr(dst, src))}
+{ assume false; }
+
+// Inputs: x0:x1 (128-bit block A), x2:x3 (128-bit key H)
+// Output: x0:x1 (128-bit reduced product)
+procedure Ghash_Polyval_Mul_Reduce()
+    modifies
+        x0; x1; x2; x3; x4;
+        v0; v1; v2; v3; v4; v5; v6; v7;
+{
+    // Load operands
+    FmovFromGpr(v0, x0);
+    MovVecLane(v0, x1);
+    FmovFromGpr(v1, x2);
+    MovVecLane(v1, x3);
+
+    // Karatsuba multiplication
+    Pmull(v2, v0, v1);
+    Pmull2(v3, v0, v1);
+
+    Vext8(v4, v0, v0);
+    Veor(v4, v0);
+    Vext8(v5, v1, v1);
+    Veor(v5, v1);
+    Pmull(v4, v4, v5);
+
+    Veor(v4, v2);
+    Veor(v4, v3);
+
+    Veor(v7, v7);
+    Vext8(v6, v7, v4);
+    Vext8(v7, v4, v7);
+    Veor(v2, v6);
+    Veor(v3, v7);
+
+    // Reduction
+    MovImm(x4, 194);
+    DupVec(v6, x4);
+    Pmull(v4, v3, v6);
+    Vext8(v5, v4, v4);
+    Veor(v3, v5);
+    Pmull2(v5, v3, v6);
+    Veor(v2, v4);
+    Veor(v2, v5);
+
+    // Store output
+    FmovToGpr(x0, v2);
+    MovLaneToGpr(x1, v2);
+}

@@ -1,0 +1,156 @@
+// tests/fixtures/vale/arm32_sample_crypto.vaf
+// Minimal Project Everest Vale verified specification for Arm32 (ARMv7-A / Thumb-2).
+// Exercises Arm32 core registers, DSP bit manipulation, and arithmetic/bitwise operations.
+module Arm32_Sample_Crypto
+
+#verbatim{:interface}
+module Map = FStar.Map
+let map = Map.t
+let (.[]) = Map.sel
+let (.[]<-) = Map.upd
+
+type register =
+  | R0 | R1 | R2 | R3 | R4 | R5 | R6 | R7
+  | R8 | R9 | R10 | R11 | R12 | SP | LR | PC
+
+type ins =
+  | IAdd : dst:register -> s1:register -> s2:register -> ins
+  | ISub : dst:register -> s1:register -> s2:register -> ins
+  | IEor : dst:register -> s1:register -> s2:register -> ins
+  | IAnd : dst:register -> s1:register -> s2:register -> ins
+  | IOrr : dst:register -> s1:register -> s2:register -> ins
+  | IRor : dst:register -> src:register -> imm:int -> ins
+  | IRbx : dst:register -> src:register -> ins
+  | IMov : dst:register -> src:register -> ins
+
+type ocmp = | OPlaceholder : int -> ocmp
+type va_code =
+  | Ins : ins:ins -> va_code
+  | Block : block:va_codes -> va_code
+  | IfElse : ifCond:ocmp -> ifTrue:va_code -> ifFalse:va_code -> va_code
+  | While : whileCond:ocmp -> whileBody:va_code -> va_code
+and va_codes = list va_code
+
+type va_pbool = unit
+let va_ttrue () = ()
+let va_ffalse (s:string) = ()
+let va_pbool_and x y = ()
+
+let va_CNil () = []
+let va_CCons x y = x::y
+let va_Block (block:va_codes) : Tot va_code = Block block
+let va_IfElse (ifCond:ocmp) (ifTrue:va_code) (ifFalse:va_code) : va_code = IfElse ifCond ifTrue ifFalse
+let va_While (whileCond:ocmp) (whileBody:va_code) : va_code = While whileCond whileBody
+let va_get_block (c:va_code{Block? c}) : GTot va_codes = Block?.block c
+
+type va_state = map register int
+let va_get_ok (s:va_state) : GTot prop = True
+let va_get_reg (r:register) (s:va_state) : GTot int = s.[r]
+let va_update_ok (sM:va_state) (sK:va_state) : GTot va_state = sK
+let va_update_reg (r:register) (sM:va_state) (sK:va_state) : GTot va_state = sK.[r] <- sM.[r]
+
+type va_operand_reg = register
+let va_op_reg_reg (r:register) : Tot register = r
+let va_is_src_reg (r:register) (s:va_state) = True
+let va_is_dst_reg (r:register) (s:va_state) = True
+let va_update_operand_reg (r:register) (sM:va_state) (sK:va_state) : GTot va_state = va_update_reg r sM sK
+let va_eval_reg (s:va_state) (r:register) : GTot int = s.[r]
+
+type cmp_operand = register
+let va_op_cmp_reg (r:register) : cmp_operand = r
+
+let va_state_eq (s0:va_state) (s1:va_state) : prop = True
+type va_fuel = int
+let eval_code (c:va_code) (s0:va_state) (f0:va_fuel) (sN:va_state) : prop = True
+
+unfold let va_hd = Cons?.hd
+unfold let va_tl = Cons?.tl
+let va_reveal_opaque (s:string) = norm_spec [zeta; delta_only [s]]
+let va_require_total (b0:va_code) (c:va_code) (s0:va_state) : prop = b0 == c
+let va_ensure_total (b0:va_code) (s0:va_state) (s1:va_state) (f1:va_fuel) : prop = eval_code b0 s0 f1 s1
+
+val va_eval_ins : c:va_code -> s0:va_state -> Tot (va_state & va_fuel)
+val va_ins_lemma : c:va_code -> s0:va_state -> Lemma (requires True) (ensures True)
+
+let va_lemma_empty_total (s0:va_state) (bN:va_codes) : Ghost (va_state & va_fuel)
+  (requires True)
+  (ensures (fun p -> fst p == s0 /\ eval_code (Block []) s0 (snd p) s0))
+  = (s0, 0)
+
+let va_lemma_merge_total (b0:va_codes) (s0:va_state) (f0:va_fuel) (sM:va_state) (fM:va_fuel) (sN:va_state) : Ghost (va_fuel)
+  (requires Cons? b0 /\ eval_code (Cons?.hd b0) s0 f0 sM /\ eval_code (Block (Cons?.tl b0)) sM fM sN)
+  (ensures (fun fN -> eval_code (Block b0) s0 fN sN))
+  = f0 + fM
+#endverbatim
+
+#verbatim
+let va_eval_ins c s0 = (s0, 1)
+let va_ins_lemma c s0 = ()
+#endverbatim
+
+var ok:bool {:state ok()};
+var r0:int {:state reg(R0)};
+var r1:int {:state reg(R1)};
+var r2:int {:state reg(R2)};
+var r3:int {:state reg(R3)};
+var r4:int {:state reg(R4)};
+var r5:int {:state reg(R5)};
+
+operand_type reg:int := inout r0 | inout r1 | inout r2 | inout r3 | inout r4 | inout r5;
+
+procedure Add(out dst:reg, in s1:reg, in s2:reg)
+    {:instruction Ins(IAdd(dst, s1, s2))}
+{
+    assume false;
+}
+
+procedure Sub(out dst:reg, in s1:reg, in s2:reg)
+    {:instruction Ins(ISub(dst, s1, s2))}
+{
+    assume false;
+}
+
+procedure Eor(out dst:reg, in s1:reg, in s2:reg)
+    {:instruction Ins(IEor(dst, s1, s2))}
+{
+    assume false;
+}
+
+procedure And(out dst:reg, in s1:reg, in s2:reg)
+    {:instruction Ins(IAnd(dst, s1, s2))}
+{
+    assume false;
+}
+
+procedure Orr(out dst:reg, in s1:reg, in s2:reg)
+    {:instruction Ins(IOrr(dst, s1, s2))}
+{
+    assume false;
+}
+
+procedure Mov(out dst:reg, in src:reg)
+    {:instruction Ins(IMov(dst, src))}
+{
+    assume false;
+}
+
+procedure Arm32_Chacha20_QuarterRound()
+    modifies
+        r0; r1; r2; r3; r4; r5;
+{
+    // a += b; d ^= a;
+    Add(r0, r0, r1);
+    Eor(r3, r3, r0);
+
+    // c += d; b ^= c;
+    Add(r2, r2, r3);
+    Eor(r1, r1, r2);
+
+    // a += b; d ^= a;
+    Add(r0, r0, r1);
+    Eor(r3, r3, r0);
+
+    // c += d; b ^= c;
+    Add(r2, r2, r3);
+    Eor(r1, r1, r2);
+}

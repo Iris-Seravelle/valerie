@@ -1,0 +1,13 @@
+module Invalid_Proof;
+
+target aarch64;
+
+#verbatim
+let test_int : int = 42
+#endverbatim
+
+procedure BrokenProof()
+  requires true;
+  ensures 1 == 2; // Impossible postcondition that must fail F* verification
+{
+}

@@ -1,0 +1,13 @@
+[package]
+name = "valerie-manifest"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+toml = "1"
+thiserror = "2.0"
+which = "8.0"

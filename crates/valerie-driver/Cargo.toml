@@ -1,0 +1,21 @@
+[package]
+name = "valerie-driver"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "valerie"
+path = "src/main.rs"
+
+[dependencies]
+valerie-target = { path = "../valerie-target" }
+valerie-manifest = { path = "../valerie-manifest" }
+valerie-depgraph = { path = "../valerie-depgraph" }
+clap = { version = "4.6.7", features = ["derive", "color", "cargo"] }
+clap_complete = "4.5"
+which = "8.0"
+
+
